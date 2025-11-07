@@ -33,6 +33,12 @@ jobs:
  
       - name: Commit and push changes
         run: |
+          # Check if dist directory exists
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory not found. Build may have failed."
+            exit 1
+          fi
+          
           # Save the dist directory
           cp -r dist /tmp/dist
           
