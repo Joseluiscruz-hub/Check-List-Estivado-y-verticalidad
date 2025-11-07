@@ -72,5 +72,8 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "deploy: ${{ github.sha }}"
-            git push origin gh-pages
+            if ! git push origin gh-pages; then
+              echo "Error: Failed to push changes to gh-pages branch"
+              exit 1
+            fi
           fi
