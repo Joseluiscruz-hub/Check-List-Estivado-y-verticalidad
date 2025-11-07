@@ -59,6 +59,8 @@ jobs:
           
           # Copy built files from saved location
           cp -r /tmp/dist/. .
+          # Clean up temporary directory
+          rm -rf /tmp/dist
           
           # Add all changes
           git add -A
