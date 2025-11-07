@@ -7,6 +7,7 @@ on:
  
 permissions:
   contents: write
+  pages: write
  
 jobs:
   build-and-deploy:
@@ -15,6 +16,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          persist-credentials: true
+          fetch-depth: 0
  
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -27,8 +31,32 @@ jobs:
       - name: Build
         run: npm run build
  
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+      - name: Commit and push changes
+        run: |
+          # Save the dist directory
+          cp -r dist /tmp/dist
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Fetch and checkout gh-pages branch
+          git fetch origin gh-pages:gh-pages || git checkout --orphan gh-pages
+          git checkout gh-pages || git checkout --orphan gh-pages
+          
+          # Clean the branch (keep .git)
+          git rm -rf . || true
+          
+          # Copy built files from saved location
+          cp -r /tmp/dist/* .
+          
+          # Add all changes
+          git add -A
+          
+          # Commit and push if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "deploy: ${{ github.sha }}"
+            git push origin gh-pages
+          fi
