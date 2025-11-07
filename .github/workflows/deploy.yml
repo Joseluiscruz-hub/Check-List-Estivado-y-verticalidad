@@ -55,7 +55,9 @@ jobs:
           git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
           
           # Clean the branch (keep .git)
-          git rm -rf . || true
+          if [ -n "$(git ls-files)" ]; then
+            git rm -rf .
+          fi
           
           # Copy built files from saved location
           cp -r /tmp/dist/. .
