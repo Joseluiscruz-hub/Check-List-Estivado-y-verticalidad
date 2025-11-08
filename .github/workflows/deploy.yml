@@ -36,5 +36,10 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - name: Deploy to GitHub Pages
-        uses: github/deploy-pages@v1
+      - name: Deploy to GitHub Pages (gh-pages branch)
+        uses: JamesIves/github-pages-deploy-action@v4.4.0
+        with:
+          branch: gh-pages
+          folder: dist
+          clean: true
+          token: ${{ secrets.GITHUB_TOKEN }}
