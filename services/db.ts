@@ -3,19 +3,27 @@ import type { Verification, PhotoRecord, ProductSessionState } from '../types';
 
 const DB_NAME = 'ChecklistDB_React';
 const DB_VERSION = 1;
-let db: IDBDatabase;
+let db: IDBDatabase | null = null;
+
+const ensureDB = (): IDBDatabase => {
+    if (!db) throw new Error('IndexedDB no inicializada. Llama a initDB() primero.');
+    return db;
+};
 
 export const initDB = (): Promise<boolean> => {
     return new Promise((resolve, reject) => {
         if (!('indexedDB' in window)) {
-            reject('IndexedDB not supported');
+            reject(new Error('IndexedDB no es soportado por este navegador'));
             return;
         }
 
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        request.onerror = () => reject('Error opening DB');
-        
+        request.onerror = (ev) => {
+            const err = (ev.target as IDBOpenDBRequest).error ?? new Error('Error desconocido al abrir DB');
+            reject(err);
+        };
+
         request.onsuccess = (event) => {
             db = (event.target as IDBOpenDBRequest).result;
             resolve(true);
@@ -38,7 +46,15 @@ export const initDB = (): Promise<boolean> => {
 
 export const addVerificationAndPhotos = (product: ProductSessionState): Promise<void> => {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['verifications', 'photos'], 'readwrite');
+        let dbInstance: IDBDatabase;
+        try {
+            dbInstance = ensureDB();
+        } catch (err) {
+            reject(err);
+            return;
+        }
+
+        const transaction = dbInstance.transaction(['verifications', 'photos'], 'readwrite');
         const verificationsStore = transaction.objectStore('verifications');
         const photosStore = transaction.objectStore('photos');
 
@@ -59,12 +75,12 @@ export const addVerificationAndPhotos = (product: ProductSessionState): Promise<
         const addRequest = verificationsStore.add(verification);
         addRequest.onsuccess = () => {
             const verificationId = addRequest.result as number;
-            if (product.fotos_adjuntas > 0) {
+            if (product.fotos_adjuntas > 0 && product.fotos) {
                 for (const [param, photoData] of Object.entries(product.fotos)) {
                     const photoRecord: Omit<PhotoRecord, 'id'> = {
                         verificacion_id: verificationId,
                         parametro: param,
-                        blob: photoData,
+                        blob: photoData as any,
                         fecha: new Date().toISOString(),
                     };
                     photosStore.add(photoRecord);
@@ -73,51 +89,87 @@ export const addVerificationAndPhotos = (product: ProductSessionState): Promise<
         };
 
         transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
+        transaction.onerror = () => reject(transaction.error ?? new Error('Error en transacción'));
     });
 };
 
 export const getVerifications = (): Promise<Verification[]> => {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction('verifications', 'readonly');
+        let dbInstance: IDBDatabase;
+        try {
+            dbInstance = ensureDB();
+        } catch (err) {
+            reject(err);
+            return;
+        }
+
+        const transaction = dbInstance.transaction('verifications', 'readonly');
         const store = transaction.objectStore('verifications');
         const request = store.getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result as Verification[]);
+        request.onerror = () => reject(request.error ?? new Error('Error leyendo verifications'));
     });
 };
 
 export const getVerificationById = (id: number): Promise<Verification | undefined> => {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction('verifications', 'readonly');
+        let dbInstance: IDBDatabase;
+        try {
+            dbInstance = ensureDB();
+        } catch (err) {
+            reject(err);
+            return;
+        }
+
+        const transaction = dbInstance.transaction('verifications', 'readonly');
         const store = transaction.objectStore('verifications');
         const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result as Verification | undefined);
+        request.onerror = () => reject(request.error ?? new Error('Error leyendo verification por id'));
     });
 }
 
 export const getPhotosForVerification = (verificationId: number): Promise<PhotoRecord[]> => {
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction('photos', 'readonly');
+        let dbInstance: IDBDatabase;
+        try {
+            dbInstance = ensureDB();
+        } catch (err) {
+            reject(err);
+            return;
+        }
+
+        const transaction = dbInstance.transaction('photos', 'readonly');
         const store = transaction.objectStore('photos');
         const index = store.index('verificacion_id');
         const request = index.getAll(verificationId);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result as PhotoRecord[]);
+        request.onerror = () => reject(request.error ?? new Error('Error leyendo photos'));
     });
 };
 
 export const deleteAllData = (): Promise<void> => {
      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['verifications', 'photos'], 'readwrite');
+        let dbInstance: IDBDatabase;
+        try {
+            dbInstance = ensureDB();
+        } catch (err) {
+            reject(err);
+            return;
+        }
+
+        const transaction = dbInstance.transaction(['verifications', 'photos'], 'readwrite');
         const verificationsStore = transaction.objectStore('verifications');
         const photosStore = transaction.objectStore('photos');
-        
-        verificationsStore.clear();
-        photosStore.clear();
+
+        const clear1 = verificationsStore.clear();
+        const clear2 = photosStore.clear();
+
+        // handle possible errors on clears
+        clear1.onerror = () => reject(clear1.error ?? new Error('Error clearing verifications'));
+        clear2.onerror = () => reject(clear2.error ?? new Error('Error clearing photos'));
 
         transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
+        transaction.onerror = () => reject(transaction.error ?? new Error('Error en transacción de borrado'));
     });
 }
